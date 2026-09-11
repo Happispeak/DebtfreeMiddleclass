@@ -171,18 +171,20 @@ async function submitPledge(){
   if(amount > 5000){ showWarn(warn, 'Maximum contribution is ₹5,000.'); return; }
   if(amount > remaining){ showWarn(warn, 'Only ₹' + remaining.toLocaleString('en-IN') + ' remains. Enter an amount at or below that.'); return; }
 
-  const { data, error } = await sb.from('pledges').insert({
+  const newPledgeId = crypto.randomUUID();
+  const { error } = await sb.from('pledges').insert({
+    id: newPledgeId,
     campaign_id: c.id,
     donor_name: name,
     amount: amount
-  }).select().single();
+  });
 
   if(error){
     showWarn(warn, 'Could not save your entry — please try again.');
     return;
   }
 
-  currentPledgeId = data.id;
+  currentPledgeId = newPledgeId;
   currentPledgeCampaignId = c.id;
 
   totalsById[c.id] = {
@@ -222,7 +224,7 @@ async function uploadProof(){
     return;
   }
 
-  const { error: dbErr } = await sb.from('pledges').update({ screenshot_path: path }).eq('id', currentPledgeId);
+  const { error: dbErr } = await sb.rpc('attach_screenshot', { pledge_id: currentPledgeId, path });
   if(dbErr){
     status.textContent = 'Saved the image but could not link it — please try again.';
     return;
