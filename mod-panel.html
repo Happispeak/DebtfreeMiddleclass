@@ -56,7 +56,7 @@
   <div id="modArea" style="display:none;">
 
     <div class="card">
-      <h2>Add a new approved request</h2>
+      <h2 id="formHeading">Add a new approved request</h2>
       <label for="newId">Unique ID (no spaces, e.g. rahul-s-hdfc-2026)</label>
       <input id="newId" type="text">
       <label for="newName">Requester name</label>
@@ -70,7 +70,8 @@
       <label for="newStory">Story (shown publicly)</label>
       <textarea id="newStory"></textarea>
       <div id="createWarn" class="banner warn" style="display:none;"></div>
-      <button class="primary" onclick="createCampaign()">Publish request</button>
+      <button class="primary" id="publishBtn" onclick="createCampaign()">Publish request</button>
+      <button class="secondary" id="cancelEditBtn" style="display:none;margin-top:8px;width:100%;" onclick="cancelEdit()">Cancel edit</button>
     </div>
 
     <div class="card">
@@ -122,20 +123,55 @@ async function createCampaign(){
     return;
   }
 
-  const { error } = await sb.from('campaigns').insert({ id, requester_name, loan_type, target, upi_id, story });
+  let error;
+  if(editingId){
+    ({ error } = await sb.from('campaigns').update({ requester_name, loan_type, target, upi_id, story }).eq('id', editingId));
+  }else{
+    ({ error } = await sb.from('campaigns').insert({ id, requester_name, loan_type, target, upi_id, story }));
+  }
+
   if(error){
     warn.textContent = 'Could not save: ' + error.message;
     warn.style.display = 'block';
     return;
   }
 
+  cancelEdit();
+  loadAll();
+}
+
+let editingId = null;
+let loadedCampaigns = [];
+
+function editCampaign(id){
+  const c = loadedCampaigns.find(x => x.id === id);
+  if(!c) return;
+  editingId = id;
+  document.getElementById('newId').value = c.id;
+  document.getElementById('newId').disabled = true;
+  document.getElementById('newName').value = c.requester_name;
+  document.getElementById('newLoanType').value = c.loan_type;
+  document.getElementById('newTarget').value = c.target;
+  document.getElementById('newUpi').value = c.upi_id;
+  document.getElementById('newStory').value = c.story || '';
+  document.getElementById('formHeading').textContent = 'Editing: ' + c.requester_name;
+  document.getElementById('publishBtn').textContent = 'Save changes';
+  document.getElementById('cancelEditBtn').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEdit(){
+  editingId = null;
   document.getElementById('newId').value = '';
+  document.getElementById('newId').disabled = false;
   document.getElementById('newName').value = '';
   document.getElementById('newLoanType').value = '';
   document.getElementById('newTarget').value = '';
   document.getElementById('newUpi').value = '';
   document.getElementById('newStory').value = '';
-  loadAll();
+  document.getElementById('formHeading').textContent = 'Add a new approved request';
+  document.getElementById('publishBtn').textContent = 'Publish request';
+  document.getElementById('cancelEditBtn').style.display = 'none';
 }
 
 async function toggleActive(id, makeActive){
@@ -148,6 +184,7 @@ async function loadAll(){
   const { data: totals } = await sb.from('campaign_totals').select('*');
   const totalsById = {};
   (totals || []).forEach(t => totalsById[t.campaign_id] = t);
+  loadedCampaigns = camps || [];
 
   const listEl = document.getElementById('campaignList');
   listEl.innerHTML = '';
@@ -162,8 +199,9 @@ async function loadAll(){
         '<div class="info"><strong>' + escapeHtml(c.requester_name) + '</strong>' +
         '₹' + Number(t.raised).toLocaleString('en-IN') + ' / ₹' + Number(c.target).toLocaleString('en-IN') +
         ' · ' + t.contributor_count + ' contributors · ' + (c.is_active ? 'Active' : 'Closed') + '</div>' +
+        '<div><button class="secondary" onclick="editCampaign(\'' + c.id + '\')">Edit</button> ' +
         '<button class="secondary" onclick="toggleActive(\'' + c.id + '\', ' + (!c.is_active) + ')">' +
-        (c.is_active ? 'Close' : 'Reopen') + '</button>';
+        (c.is_active ? 'Close' : 'Reopen') + '</button></div>';
       listEl.appendChild(row);
     });
   }
