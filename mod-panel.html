@@ -182,9 +182,18 @@ async function toggleActive(id, makeActive){
 async function loadAll(){
   const { data: camps } = await sb.from('campaigns').select('*').order('created_at', { ascending: false });
   const { data: totals } = await sb.from('campaign_totals').select('*');
+  const { data: pledges } = await sb.from('pledges').select('*').order('created_at', { ascending: false }).limit(100);
+
   const totalsById = {};
   (totals || []).forEach(t => totalsById[t.campaign_id] = t);
   loadedCampaigns = camps || [];
+
+  const pendingById = {};
+  (pledges || []).forEach(p => {
+    if(!p.verified){
+      pendingById[p.campaign_id] = (pendingById[p.campaign_id] || 0) + Number(p.amount);
+    }
+  });
 
   const listEl = document.getElementById('campaignList');
   listEl.innerHTML = '';
@@ -193,12 +202,14 @@ async function loadAll(){
   }else{
     camps.forEach(c => {
       const t = totalsById[c.id] || { raised: 0, contributor_count: 0 };
+      const pending = pendingById[c.id] || 0;
       const row = document.createElement('div');
       row.className = 'campaign-row';
       row.innerHTML =
         '<div class="info"><strong>' + escapeHtml(c.requester_name) + '</strong>' +
-        '₹' + Number(t.raised).toLocaleString('en-IN') + ' / ₹' + Number(c.target).toLocaleString('en-IN') +
-        ' · ' + t.contributor_count + ' contributors · ' + (c.is_active ? 'Active' : 'Closed') + '</div>' +
+        '₹' + Number(t.raised).toLocaleString('en-IN') + ' verified / ₹' + Number(c.target).toLocaleString('en-IN') +
+        (pending > 0 ? ' · ₹' + pending.toLocaleString('en-IN') + ' pending review' : '') +
+        ' · ' + t.contributor_count + ' verified contributors · ' + (c.is_active ? 'Active' : 'Closed') + '</div>' +
         '<div><button class="secondary" onclick="editCampaign(\'' + c.id + '\')">Edit</button> ' +
         '<button class="secondary" onclick="toggleActive(\'' + c.id + '\', ' + (!c.is_active) + ')">' +
         (c.is_active ? 'Close' : 'Reopen') + '</button></div>';
@@ -206,7 +217,6 @@ async function loadAll(){
     });
   }
 
-  const { data: pledges } = await sb.from('pledges').select('*').order('created_at', { ascending: false }).limit(100);
   const logEl = document.getElementById('pledgeLog');
   if(!pledges || pledges.length === 0){
     logEl.innerHTML = '<div class="empty">No contributions logged yet.</div>';
