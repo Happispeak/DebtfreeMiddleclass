@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contribute — Debt Free Middle Class</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1c231f; --paper:#f7f6f2; --panel:#ffffff; --line:#dedad2;
+    --navy:#233b52; --navy-dim:#3d5871; --green:#3f7d58; --green-dim:#e7f0ea;
+    --danger:#a13f3f; --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.45;}
+  .wrap{max-width:460px;margin:0 auto;padding:20px 16px 60px;}
+  .note{font-size:13px;color:var(--navy-dim);background:var(--green-dim);padding:10px 12px;border-radius:8px;margin-bottom:16px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px;}
+  h1{font-size:19px;margin:0 0 4px;}
+  label{display:block;font-size:13px;color:var(--navy-dim);margin:14px 0 5px;}
+  label:first-child{margin-top:0;}
+  input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:15px;font-family:inherit;background:#fff;color:var(--ink);}
+  input:focus,select:focus{outline:2px solid var(--navy);outline-offset:1px;}
+  .cap-note{font-size:12px;color:var(--navy-dim);margin-top:4px;}
+  button.primary{width:100%;margin-top:16px;padding:11px;background:var(--navy);color:#fff;border:none;
+    border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;}
+  button.secondary{width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--line);
+    border-radius:8px;font-size:14px;color:var(--navy-dim);cursor:pointer;font-family:inherit;}
+  .banner{font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:14px;}
+  .banner.warn{background:#fbeeee;color:var(--danger);}
+  .banner.info{background:var(--green-dim);color:var(--green);}
+  .campaign-meta{font-size:13px;color:var(--navy-dim);margin:4px 0 12px;}
+  .pay-box{text-align:center;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+  .pay-box .amt{font-size:22px;font-weight:700;margin-bottom:10px;}
+  .pay-box .upi-id{font-size:16px;margin:10px 0;color:var(--navy);font-weight:600;
+    background:var(--paper);padding:10px;border-radius:8px;border:1px solid var(--line);}
+  .contributor-count{font-size:12px;color:var(--navy-dim);margin-top:10px;}
+  .thankyou{font-size:14px;color:var(--green);font-weight:600;margin-top:10px;}
+  .empty{font-size:13px;color:var(--navy-dim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Contribute to a loan closure</h1>
+  <div class="note">Select who you'd like to help, enter an amount, then pay directly via UPI.</div>
+
+  <div class="card">
+    <div id="loadingMsg" class="empty">Loading requests…</div>
+
+    <div id="formArea" style="display:none;">
+      <label for="donorName">Your name</label>
+      <input id="donorName" type="text" placeholder="e.g. Priya K.">
+
+      <label for="campaignSelect">Who would you like to help?</label>
+      <select id="campaignSelect" onchange="onCampaignChange()"></select>
+      <div id="campaignMeta" class="campaign-meta"></div>
+
+      <div id="stage1">
+        <label for="amount">Amount (₹)</label>
+        <input id="amount" type="number" min="100" max="5000" step="1" placeholder="Between ₹100 – ₹5,000">
+        <div class="cap-note">Allowed range: ₹100 to ₹5,000 per donor.</div>
+        <div id="warnBox" class="banner warn" style="display:none;"></div>
+        <button class="primary" onclick="submitPledge()">Continue to payment</button>
+      </div>
+
+      <div id="payBox" class="pay-box" style="display:none;">
+        <div class="amt" id="payAmount"></div>
+        <div class="upi-id" id="payUpi"></div>
+        <button class="secondary" id="copyBtn" onclick="copyUpi()">Copy UPI ID</button>
+        <div class="thankyou">Thank you — your contribution has been logged.</div>
+        <div class="contributor-count" id="contribCount"></div>
+        <button class="secondary" onclick="resetForm()">Log another contribution</button>
+      </div>
+    </div>
+
+    <div id="noneMsg" class="empty" style="display:none;">No active requests right now — please check back soon.</div>
+  </div>
+
+  <div class="banner info">This is a personal contribution to an individual, not a donation to a registered charity — no tax deduction applies, and it may count as taxable income for the recipient.</div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://amzjbgecxdrngeiausvx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtempiZ2VjeGRybmdlaWF1c3Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNDQ2OTYsImV4cCI6MjEwNDYyMDY5Nn0.DouVPpKCLzGyiAeClR9BKlq-xy6MuJwFxLn5bDIaoU8";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let campaigns = [];
+let totalsById = {};
+
+async function init(){
+  const { data: camps, error: e1 } = await sb.from('campaigns').select('*').eq('is_active', true);
+  const { data: totals, error: e2 } = await sb.from('campaign_totals').select('*');
+
+  if(e1 || e2){
+    document.getElementById('loadingMsg').textContent = 'Could not load requests — please refresh.';
+    return;
+  }
+
+  totalsById = {};
+  (totals || []).forEach(t => totalsById[t.campaign_id] = t);
+
+  campaigns = (camps || []).filter(c => {
+    const raised = totalsById[c.id] ? Number(totalsById[c.id].raised) : 0;
+    return raised < Number(c.target);
+  });
+
+  document.getElementById('loadingMsg').style.display = 'none';
+
+  if(campaigns.length === 0){
+    document.getElementById('noneMsg').style.display = 'block';
+    return;
+  }
+
+  const sel = document.getElementById('campaignSelect');
+  sel.innerHTML = '';
+  campaigns.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.requester_name + ' — ' + c.loan_type;
+    sel.appendChild(opt);
+  });
+
+  document.getElementById('formArea').style.display = 'block';
+  onCampaignChange();
+}
+
+function currentCampaign(){
+  const id = document.getElementById('campaignSelect').value;
+  return campaigns.find(c => c.id === id);
+}
+
+function onCampaignChange(){
+  const c = currentCampaign();
+  const t = totalsById[c.id] || { raised: 0, contributor_count: 0 };
+  const remaining = Number(c.target) - Number(t.raised);
+  document.getElementById('campaignMeta').textContent =
+    '₹' + Number(t.raised).toLocaleString('en-IN') + ' raised of ₹' + Number(c.target).toLocaleString('en-IN') +
+    ' — ₹' + remaining.toLocaleString('en-IN') + ' still needed';
+  resetForm();
+}
+
+async function submitPledge(){
+  const c = currentCampaign();
+  const nameInput = document.getElementById('donorName');
+  const amtInput = document.getElementById('amount');
+  const warn = document.getElementById('warnBox');
+  warn.style.display = 'none';
+
+  const name = nameInput.value.trim();
+  const amount = parseInt(amtInput.value, 10);
+  const t = totalsById[c.id] || { raised: 0 };
+  const remaining = Number(c.target) - Number(t.raised);
+
+  if(!name){ showWarn(warn, 'Enter your name.'); return; }
+  if(!amount || isNaN(amount)){ showWarn(warn, 'Enter a valid amount.'); return; }
+  if(amount < 100){ showWarn(warn, 'Minimum contribution is ₹100.'); return; }
+  if(amount > 5000){ showWarn(warn, 'Maximum contribution is ₹5,000.'); return; }
+  if(amount > remaining){ showWarn(warn, 'Only ₹' + remaining.toLocaleString('en-IN') + ' remains. Enter an amount at or below that.'); return; }
+
+  const { error } = await sb.from('pledges').insert({
+    campaign_id: c.id,
+    donor_name: name,
+    amount: amount
+  });
+
+  if(error){
+    showWarn(warn, 'Could not save your entry — please try again.');
+    return;
+  }
+
+  totalsById[c.id] = {
+    campaign_id: c.id,
+    raised: Number(t.raised) + amount,
+    contributor_count: (totalsById[c.id]?.contributor_count || 0) + 1
+  };
+
+  document.getElementById('payAmount').textContent = '₹' + amount.toLocaleString('en-IN');
+  document.getElementById('payUpi').textContent = c.upi_id;
+  document.getElementById('contribCount').textContent =
+    totalsById[c.id].contributor_count + ' people have contributed to this request so far.';
+  document.getElementById('stage1').style.display = 'none';
+  document.getElementById('payBox').style.display = 'block';
+  onCampaignChange.skipReset = true;
+}
+
+function copyUpi(){
+  const c = currentCampaign();
+  const btn = document.getElementById('copyBtn');
+  navigator.clipboard.writeText(c.upi_id).then(()=>{
+    const original = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(()=>{ btn.textContent = original; }, 1500);
+  }).catch(()=>{
+    btn.textContent = 'Copy failed — copy manually';
+  });
+}
+
+function resetForm(){
+  document.getElementById('donorName').value = '';
+  document.getElementById('amount').value = '';
+  document.getElementById('warnBox').style.display = 'none';
+  document.getElementById('stage1').style.display = 'block';
+  document.getElementById('payBox').style.display = 'none';
+  const c = currentCampaign();
+  const t = totalsById[c.id] || { raised: 0 };
+  document.getElementById('campaignMeta').textContent =
+    '₹' + Number(t.raised).toLocaleString('en-IN') + ' raised of ₹' + Number(c.target).toLocaleString('en-IN');
+}
+
+function showWarn(el, msg){ el.textContent = msg; el.style.display = 'block'; }
+
+init();
+</script>
+</body>
+</html>

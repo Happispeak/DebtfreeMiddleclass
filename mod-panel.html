@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mod Panel — Debt Free Middle Class</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1c231f; --paper:#f7f6f2; --panel:#ffffff; --line:#dedad2;
+    --navy:#233b52; --navy-dim:#3d5871; --green:#3f7d58; --green-dim:#e7f0ea;
+    --danger:#a13f3f; --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.45;}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 60px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px;}
+  h1{font-size:19px;margin:0 0 12px;}
+  h2{font-size:15px;margin:0 0 10px;}
+  label{display:block;font-size:13px;color:var(--navy-dim);margin:12px 0 5px;}
+  label:first-child{margin-top:0;}
+  input,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:15px;font-family:inherit;background:#fff;color:var(--ink);}
+  textarea{resize:vertical;min-height:60px;}
+  button.primary{width:100%;margin-top:16px;padding:11px;background:var(--navy);color:#fff;border:none;
+    border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;}
+  button.secondary{padding:6px 12px;background:none;border:1px solid var(--line);
+    border-radius:8px;font-size:13px;color:var(--navy-dim);cursor:pointer;font-family:inherit;}
+  .banner{font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:14px;}
+  .banner.warn{background:#fbeeee;color:var(--danger);}
+  .banner.info{background:var(--green-dim);color:var(--green);}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);}
+  th{color:var(--navy-dim);font-weight:600;}
+  .campaign-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);}
+  .campaign-row:last-child{border-bottom:none;}
+  .campaign-row .info{font-size:13px;}
+  .campaign-row .info strong{display:block;font-size:14px;}
+  .empty{font-size:13px;color:var(--navy-dim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loginCard" class="card">
+    <h1>Mod login</h1>
+    <label for="modEmail">Email</label>
+    <input id="modEmail" type="email">
+    <label for="modPass">Password</label>
+    <input id="modPass" type="password">
+    <div id="loginWarn" class="banner warn" style="display:none;"></div>
+    <button class="primary" onclick="login()">Log in</button>
+  </div>
+
+  <div id="modArea" style="display:none;">
+
+    <div class="card">
+      <h2>Add a new approved request</h2>
+      <label for="newId">Unique ID (no spaces, e.g. rahul-s-hdfc-2026)</label>
+      <input id="newId" type="text">
+      <label for="newName">Requester name</label>
+      <input id="newName" type="text">
+      <label for="newLoanType">Loan type</label>
+      <input id="newLoanType" type="text">
+      <label for="newTarget">Outstanding amount (₹)</label>
+      <input id="newTarget" type="number">
+      <label for="newUpi">UPI ID</label>
+      <input id="newUpi" type="text">
+      <label for="newStory">Story (shown publicly)</label>
+      <textarea id="newStory"></textarea>
+      <div id="createWarn" class="banner warn" style="display:none;"></div>
+      <button class="primary" onclick="createCampaign()">Publish request</button>
+    </div>
+
+    <div class="card">
+      <h2>Active requests</h2>
+      <div id="campaignList"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Contribution log (mod only)</h2>
+      <div id="pledgeLog"><div class="empty">Loading…</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://amzjbgecxdrngeiausvx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtempiZ2VjeGRybmdlaWF1c3Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNDQ2OTYsImV4cCI6MjEwNDYyMDY5Nn0.DouVPpKCLzGyiAeClR9BKlq-xy6MuJwFxLn5bDIaoU8";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function login(){
+  const email = document.getElementById('modEmail').value.trim();
+  const password = document.getElementById('modPass').value;
+  const warn = document.getElementById('loginWarn');
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){
+    warn.textContent = 'Login failed: ' + error.message;
+    warn.style.display = 'block';
+    return;
+  }
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('modArea').style.display = 'block';
+  loadAll();
+}
+
+async function createCampaign(){
+  const warn = document.getElementById('createWarn');
+  warn.style.display = 'none';
+  const id = document.getElementById('newId').value.trim();
+  const requester_name = document.getElementById('newName').value.trim();
+  const loan_type = document.getElementById('newLoanType').value.trim();
+  const target = parseInt(document.getElementById('newTarget').value, 10);
+  const upi_id = document.getElementById('newUpi').value.trim();
+  const story = document.getElementById('newStory').value.trim();
+
+  if(!id || !requester_name || !loan_type || !target || !upi_id){
+    warn.textContent = 'Fill in ID, name, loan type, target, and UPI ID.';
+    warn.style.display = 'block';
+    return;
+  }
+
+  const { error } = await sb.from('campaigns').insert({ id, requester_name, loan_type, target, upi_id, story });
+  if(error){
+    warn.textContent = 'Could not save: ' + error.message;
+    warn.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('newId').value = '';
+  document.getElementById('newName').value = '';
+  document.getElementById('newLoanType').value = '';
+  document.getElementById('newTarget').value = '';
+  document.getElementById('newUpi').value = '';
+  document.getElementById('newStory').value = '';
+  loadAll();
+}
+
+async function toggleActive(id, makeActive){
+  await sb.from('campaigns').update({ is_active: makeActive }).eq('id', id);
+  loadAll();
+}
+
+async function loadAll(){
+  const { data: camps } = await sb.from('campaigns').select('*').order('created_at', { ascending: false });
+  const { data: totals } = await sb.from('campaign_totals').select('*');
+  const totalsById = {};
+  (totals || []).forEach(t => totalsById[t.campaign_id] = t);
+
+  const listEl = document.getElementById('campaignList');
+  listEl.innerHTML = '';
+  if(!camps || camps.length === 0){
+    listEl.innerHTML = '<div class="empty">No requests yet.</div>';
+  }else{
+    camps.forEach(c => {
+      const t = totalsById[c.id] || { raised: 0, contributor_count: 0 };
+      const row = document.createElement('div');
+      row.className = 'campaign-row';
+      row.innerHTML =
+        '<div class="info"><strong>' + escapeHtml(c.requester_name) + '</strong>' +
+        '₹' + Number(t.raised).toLocaleString('en-IN') + ' / ₹' + Number(c.target).toLocaleString('en-IN') +
+        ' · ' + t.contributor_count + ' contributors · ' + (c.is_active ? 'Active' : 'Closed') + '</div>' +
+        '<button class="secondary" onclick="toggleActive(\'' + c.id + '\', ' + (!c.is_active) + ')">' +
+        (c.is_active ? 'Close' : 'Reopen') + '</button>';
+      listEl.appendChild(row);
+    });
+  }
+
+  const { data: pledges } = await sb.from('pledges').select('*').order('created_at', { ascending: false }).limit(100);
+  const logEl = document.getElementById('pledgeLog');
+  if(!pledges || pledges.length === 0){
+    logEl.innerHTML = '<div class="empty">No contributions logged yet.</div>';
+  }else{
+    let html = '<table><tr><th>Donor</th><th>Amount</th><th>Campaign</th><th>When</th></tr>';
+    pledges.forEach(p => {
+      html += '<tr><td>' + escapeHtml(p.donor_name) + '</td><td>₹' + Number(p.amount).toLocaleString('en-IN') +
+        '</td><td>' + escapeHtml(p.campaign_id) + '</td><td>' + new Date(p.created_at).toLocaleString('en-IN') + '</td></tr>';
+    });
+    html += '</table>';
+    logEl.innerHTML = html;
+  }
+}
+
+function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+// Restore session if already logged in
+sb.auth.getSession().then(({ data }) => {
+  if(data.session){
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('modArea').style.display = 'block';
+    loadAll();
+  }
+});
+</script>
+</body>
+</html>
