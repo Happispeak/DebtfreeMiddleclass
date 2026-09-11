@@ -211,14 +211,31 @@ async function loadAll(){
   if(!pledges || pledges.length === 0){
     logEl.innerHTML = '<div class="empty">No contributions logged yet.</div>';
   }else{
-    let html = '<table><tr><th>Donor</th><th>Amount</th><th>Campaign</th><th>When</th></tr>';
-    pledges.forEach(p => {
+    let html = '<table><tr><th>Donor</th><th>Amount</th><th>Campaign</th><th>When</th><th>Screenshot</th><th>Verified</th><th>Thanked</th></tr>';
+    for(const p of pledges){
+      let proofCell = '<span class="empty">None</span>';
+      if(p.screenshot_path){
+        const { data: signed } = await sb.storage.from('payment-proofs').createSignedUrl(p.screenshot_path, 3600);
+        if(signed?.signedUrl){
+          proofCell = '<a href="' + signed.signedUrl + '" target="_blank">View</a>';
+        }
+      }
       html += '<tr><td>' + escapeHtml(p.donor_name) + '</td><td>₹' + Number(p.amount).toLocaleString('en-IN') +
-        '</td><td>' + escapeHtml(p.campaign_id) + '</td><td>' + new Date(p.created_at).toLocaleString('en-IN') + '</td></tr>';
-    });
+        '</td><td>' + escapeHtml(p.campaign_id) + '</td><td>' + new Date(p.created_at).toLocaleString('en-IN') + '</td>' +
+        '<td>' + proofCell + '</td>' +
+        '<td><input type="checkbox" ' + (p.verified ? 'checked' : '') + ' onchange="toggleFlag(\'' + p.id + '\',\'verified\',this.checked)"></td>' +
+        '<td><input type="checkbox" ' + (p.thanked ? 'checked' : '') + ' onchange="toggleFlag(\'' + p.id + '\',\'thanked\',this.checked)"></td>' +
+        '</tr>';
+    }
     html += '</table>';
     logEl.innerHTML = html;
   }
+}
+
+async function toggleFlag(pledgeId, field, value){
+  const update = {};
+  update[field] = value;
+  await sb.from('pledges').update(update).eq('id', pledgeId);
 }
 
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }

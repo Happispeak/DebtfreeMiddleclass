@@ -38,6 +38,9 @@
     background:var(--paper);padding:10px;border-radius:8px;border:1px solid var(--line);}
   .contributor-count{font-size:12px;color:var(--navy-dim);margin-top:10px;}
   .thankyou{font-size:14px;color:var(--green);font-weight:600;margin-top:10px;}
+  .proof-section{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);text-align:left;}
+  .proof-section label{font-size:12px;}
+  .proof-section input[type="file"]{margin-bottom:8px;}
   .empty{font-size:13px;color:var(--navy-dim);}
 </style>
 </head>
@@ -71,6 +74,14 @@
         <button class="secondary" id="copyBtn" onclick="copyUpi()">Copy UPI ID</button>
         <div class="thankyou">Thank you — your contribution has been logged.</div>
         <div class="contributor-count" id="contribCount"></div>
+
+        <div class="proof-section">
+          <label for="proofFile">Add a payment screenshot (optional) — helps us confirm your contribution faster</label>
+          <input id="proofFile" type="file" accept="image/*">
+          <button class="secondary" onclick="uploadProof()">Add screenshot</button>
+          <div id="proofStatus" class="cap-note"></div>
+        </div>
+
         <button class="secondary" onclick="resetForm()">Log another contribution</button>
       </div>
     </div>
@@ -159,16 +170,19 @@ async function submitPledge(){
   if(amount > 5000){ showWarn(warn, 'Maximum contribution is ₹5,000.'); return; }
   if(amount > remaining){ showWarn(warn, 'Only ₹' + remaining.toLocaleString('en-IN') + ' remains. Enter an amount at or below that.'); return; }
 
-  const { error } = await sb.from('pledges').insert({
+  const { data, error } = await sb.from('pledges').insert({
     campaign_id: c.id,
     donor_name: name,
     amount: amount
-  });
+  }).select().single();
 
   if(error){
     showWarn(warn, 'Could not save your entry — please try again.');
     return;
   }
+
+  currentPledgeId = data.id;
+  currentPledgeCampaignId = c.id;
 
   totalsById[c.id] = {
     campaign_id: c.id,
@@ -180,9 +194,39 @@ async function submitPledge(){
   document.getElementById('payUpi').textContent = c.upi_id;
   document.getElementById('contribCount').textContent =
     totalsById[c.id].contributor_count + ' people have contributed to this request so far.';
+  document.getElementById('proofStatus').textContent = '';
+  document.getElementById('proofFile').value = '';
   document.getElementById('stage1').style.display = 'none';
   document.getElementById('payBox').style.display = 'block';
-  onCampaignChange.skipReset = true;
+  document.getElementById('campaignSelect').disabled = true;
+}
+
+let currentPledgeId = null;
+let currentPledgeCampaignId = null;
+
+async function uploadProof(){
+  const fileInput = document.getElementById('proofFile');
+  const status = document.getElementById('proofStatus');
+  const file = fileInput.files[0];
+  if(!file){ status.textContent = 'Choose a screenshot first.'; return; }
+  if(!currentPledgeId || !currentPledgeCampaignId){ status.textContent = 'Something went wrong — please log your contribution again.'; return; }
+
+  status.textContent = 'Adding your screenshot…';
+  const path = currentPledgeCampaignId + '/' + currentPledgeId + '-' + Date.now() + '-' + file.name;
+
+  const { error: upErr } = await sb.storage.from('payment-proofs').upload(path, file);
+  if(upErr){
+    status.textContent = 'Upload failed — please try again.';
+    return;
+  }
+
+  const { error: dbErr } = await sb.from('pledges').update({ screenshot_path: path }).eq('id', currentPledgeId);
+  if(dbErr){
+    status.textContent = 'Saved the image but could not link it — please try again.';
+    return;
+  }
+
+  status.textContent = 'Thank you — got it!';
 }
 
 function copyUpi(){
@@ -203,6 +247,7 @@ function resetForm(){
   document.getElementById('warnBox').style.display = 'none';
   document.getElementById('stage1').style.display = 'block';
   document.getElementById('payBox').style.display = 'none';
+  document.getElementById('campaignSelect').disabled = false;
   const c = currentCampaign();
   const t = totalsById[c.id] || { raised: 0 };
   document.getElementById('campaignMeta').textContent =
