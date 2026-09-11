@@ -245,7 +245,11 @@ async function loadAll(){
 async function toggleFlag(pledgeId, field, value){
   const update = {};
   update[field] = value;
-  await sb.from('pledges').update(update).eq('id', pledgeId);
+  const { error } = await sb.from('pledges').update(update).eq('id', pledgeId);
+  if(error){
+    alert('Could not save this change: ' + error.message);
+  }
+  loadAll();
 }
 
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
