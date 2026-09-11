@@ -72,17 +72,18 @@
         <div class="amt" id="payAmount"></div>
         <div class="upi-id" id="payUpi"></div>
         <button class="secondary" id="copyBtn" onclick="copyUpi()">Copy UPI ID</button>
-        <div class="thankyou">Thank you — your contribution has been logged and will be reflected once confirmed.</div>
+        <div class="thankyou">Your contribution has been logged. Please add a payment screenshot below to complete verification.</div>
         <div class="contributor-count" id="contribCount"></div>
 
         <div class="proof-section">
-          <label for="proofFile">Add a payment screenshot (optional) — helps us confirm your contribution faster</label>
+          <label for="proofFile">Add a payment screenshot — required to verify your contribution</label>
+          <div class="cap-note">Please make sure the screenshot clearly shows both the amount paid and the receiver's UPI ID or name. Your contribution can't be verified without this.</div>
           <input id="proofFile" type="file" accept="image/*">
           <button class="secondary" onclick="uploadProof()">Add screenshot</button>
           <div id="proofStatus" class="cap-note"></div>
         </div>
 
-        <button class="secondary" onclick="resetForm()">Log another contribution</button>
+        <button class="secondary" id="resetBtn" onclick="resetForm()" disabled>Log another contribution</button>
       </div>
     </div>
 
@@ -196,6 +197,7 @@ async function submitPledge(){
     totalsById[c.id].contributor_count + ' people have contributed to this request so far.';
   document.getElementById('proofStatus').textContent = '';
   document.getElementById('proofFile').value = '';
+  document.getElementById('resetBtn').disabled = true;
   document.getElementById('stage1').style.display = 'none';
   document.getElementById('payBox').style.display = 'block';
   document.getElementById('campaignSelect').disabled = true;
@@ -227,6 +229,7 @@ async function uploadProof(){
   }
 
   status.textContent = 'Thank you — got it!';
+  document.getElementById('resetBtn').disabled = false;
 }
 
 function copyUpi(){

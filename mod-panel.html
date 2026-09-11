@@ -225,7 +225,7 @@ async function loadAll(){
     for(const p of pledges){
       let proofCell = '<span class="empty">None</span>';
       if(p.screenshot_path){
-        const { data: signed } = await sb.storage.from('payment-proofs').createSignedUrl(p.screenshot_path, 3600);
+        const { data: signed } = await sb.storage.from('payment-proofs').createSignedUrl(p.screenshot_path, 86400);
         if(signed?.signedUrl){
           proofCell = '<a href="' + signed.signedUrl + '" target="_blank">View</a>';
         }
